@@ -1,0 +1,61 @@
+version: "3.7"
+
+services:
+
+  traefik:
+    image: "traefik:v2.2"
+    container_name: "traefik"
+    command:
+      - "--api.insecure=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--metrics.prometheus=true"
+      - "--metrics.prometheus.buckets=0.1,0.3,1.2,5.0"
+    ports:
+      - "80:80"
+      - "8080:8080"
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+
+  react:
+    build:
+      context: '.'
+    container_name: "react"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.react.rule=Host(`app.localhost`)"
+      - "traefik.http.routers.react.service=react"
+      - "traefik.http.services.react.loadbalancer.server.port=80"
+    depends_on:
+      - "traefik"
+
+  prometheus:
+    image: "prom/prometheus"
+    container_name: "prometheus"
+    volumes:
+      - "./prometheus:/etc/prometheus/"
+      - "./prometheus_data:/prometheus"
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.prometheus.rule=Host(`prometheus.localhost`)"
+      - "traefik.http.routers.prometheus.service=prometheus"
+      - "traefik.http.services.prometheus.loadbalancer.server.port=9090"
+    depends_on:
+      - "traefik"
+
+  grafana:
+    image: "grafana/grafana"
+    container_name: "grafana"
+    volumes:
+      - "./grafana:/etc/grafana/provisioning/"
+      - "./grafana_data:/var/lib/grafana"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.grafana.rule=Host(`grafana.localhost`)"
+      - "traefik.http.routers.grafana.service=grafana"
+      - "traefik.http.services.grafana.loadbalancer.server.port=3000"
+    depends_on:
+      - "prometheus"
